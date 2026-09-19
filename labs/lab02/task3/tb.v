@@ -1,46 +1,68 @@
-// tb.v
-// Given -- do not modify.
-//
-// Instantiates all three of your AND-gate implementations side by side and
-// drives them with the SAME fast-toggling stimulus, so you can compare all
-// three waveforms in one view and see directly which implementation(s)
-// respond correctly to inputs that change faster than the delay.
-
 module tb;
 
-  reg  t_a, t_b;
-  wire y_df, y_before, y_intra;
+  reg  [1:0] t_a, t_b;
+  wire       t_gt, t_lt, t_eq;
+  integer    i, j, errors;
+  reg        exp_gt, exp_lt, exp_eq;
 
-  and_df         U_DF     (.a(t_a), .b(t_b), .y(y_df));
-  and_beh_before U_BEFORE (.a(t_a), .b(t_b), .y(y_before));
-  and_beh_intra  U_INTRA  (.a(t_a), .b(t_b), .y(y_intra));
+  comp2 DUT (
+    .A  (t_a),
+    .B  (t_b),
+    .GT (t_gt),
+    .LT (t_lt),
+    .EQ (t_eq)
+  );
 
   // Waveform dump configuration
   string vcd_file;
   initial begin
     if ($value$plusargs("vcd=%s", vcd_file)) begin
       $dumpfile(vcd_file);
-      $dumpvars(0, tb);
+      $dumpvars(0, DUT);
     end
   end
 
-  // Each gate has a #5 delay somewhere in its own implementation. Toggle
-  // the inputs every 2 time units -- faster than that 5-unit delay -- so
-  // that any implementation using stale values will show it.
   initial begin
-    t_a = 0; t_b = 0;
-    #2 t_a = 1; t_b = 0;
-    #2 t_a = 1; t_b = 1;
-    #2 t_a = 0; t_b = 1;
-    #2 t_a = 1; t_b = 1;
-    #2 t_a = 0; t_b = 0;
-    #2 t_a = 1; t_b = 1;
-    #2 t_a = 0; t_b = 0;
-    #10 $finish;
+    errors = 0;
+
+    for (i = 0; i < 4; i = i + 1) begin
+      for (j = 0; j < 4; j = j + 1) begin
+        t_a = i;
+        t_b = j;
+        #1;
+
+        if (t_a > t_b) begin
+          exp_gt = 1'b1;
+          exp_lt = 1'b0;
+          exp_eq = 1'b0;
+        end else if (t_a < t_b) begin
+          exp_gt = 1'b0;
+          exp_lt = 1'b1;
+          exp_eq = 1'b0;
+        end else begin
+          exp_gt = 1'b0;
+          exp_lt = 1'b0;
+          exp_eq = 1'b1;
+        end
+
+        if ({t_gt, t_lt, t_eq} !== {exp_gt, exp_lt, exp_eq}) begin
+          $display("FAIL at time %0t: A=%b B=%b  got GT=%b LT=%b EQ=%b  expected GT=%b LT=%b EQ=%b",
+                   $time, t_a, t_b, t_gt, t_lt, t_eq, exp_gt, exp_lt, exp_eq);
+          errors = errors + 1;
+        end
+      end
+    end
+
+    $display("SUMMARY: %0d/%0d passed", 16 - errors, 16);
+    if (errors == 0)
+      $display("PASS: all 16 combinations matched expected comparator behavior");
+    else
+      $display("FAIL: %0d mismatch(es) detected", errors);
+
+    $finish;
   end
 
   initial
-    $monitor($time, " a=%b b=%b | df=%b  before=%b  intra=%b",
-             t_a, t_b, y_df, y_before, y_intra);
+    $monitor($time, " A=%b B=%b | GT=%b LT=%b EQ=%b", t_a, t_b, t_gt, t_lt, t_eq);
 
 endmodule
